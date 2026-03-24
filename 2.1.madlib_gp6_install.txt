@@ -1,0 +1,16 @@
+######## Greenplum madlib installation
+
+#### 2.1 MADLib 설치
+# su - gpadmin
+$ cd /data/setup/
+$ tar zxf madlib-2.2.0-gp6-rhel9-x86_64.tar.gz
+$ cd madlib-2.2.0-gp6-rhel9-x86_64
+$ gppkg --install madlib-2.2.0-gp6-rhel9-x86_64.gppkg
+$ psql
+=# create extension plpython3u;
+=# CREATE EXTENSION madlib ;
+=# grant usage on schema madlib to udba;
+\q
+$ 
+
+
