@@ -1,0 +1,30 @@
+######## Greenplum plr installation
+## 3.1.1 plr installation
+$ gppkg --install plr-3.1.3-gp6-rhel9-x86_64.gppkg
+$ gpstop -af
+$ source $GPHOME/greenplum_path.sh
+$ gpstart -a
+$ psql -c "CREATE EXTENSION plr;"
+
+## 3.1.2 
+$ gppkg --install DataScienceR-2.2.0-gp6-rhel9_x86_64.gppkg
+$ source $GPHOME/greenplum_path.sh
+$ gpstop -af
+$ gpstart -a
+
+## 3.1.3.1
+## Change permissions to superuser so that only the udba user can execute plr.
+$ psql -c "ALTER ROLE udba SUPERUSER; "
+
+or
+
+## 3.1.3.2
+## Change to a trusted language so that PLR can be run as normal users. --all node
+$ sh 3.1.plr_gp6_install_2_permision.sh
+
+## Example of a command executed in 3.1.plr_gp6_install_2_permision.sh
+PGOPTIONS='-c gp_session_role=utility' psql -h r9g6s2 -p 5432 -c "SET allow_system_table_mods=ON;UPDATE pg_language SET lanpltrusted = TRUE WHERE lanname = 'plr';" 
+PGOPTIONS='-c gp_session_role=utility' psql -h r9g6s2 -p 6000 -c "SET allow_system_table_mods=ON;UPDATE pg_language SET lanpltrusted = TRUE WHERE lanname = 'plr';" 
+PGOPTIONS='-c gp_session_role=utility' psql -h r9g6s2 -p 6001 -c "SET allow_system_table_mods=ON;UPDATE pg_language SET lanpltrusted = TRUE WHERE lanname = 'plr';" 
+PGOPTIONS='-c gp_session_role=utility' psql -h r9g6s2 -p 6002 -c "SET allow_system_table_mods=ON;UPDATE pg_language SET lanpltrusted = TRUE WHERE lanname = 'plr';" 
+PGOPTIONS='-c gp_session_role=utility' psql -h r9g6s2 -p 6003 -c "SET allow_system_table_mods=ON;UPDATE pg_language SET lanpltrusted = TRUE WHERE lanname = 'plr';" 
