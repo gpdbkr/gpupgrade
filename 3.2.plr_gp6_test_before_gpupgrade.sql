@@ -208,7 +208,7 @@ AS
 
 -- Create UDF to run a random forest model for each group. In other words, run a random forest model for each group and return predicted values
 CREATE OR REPLACE FUNCTION public.plr_test_rf_predict(id int[], y float8[], x1 float8[], x2 float8[])
-RETURNS SETOF public.plr_rf_predict_type AS
+RETURNS SETOF public.plr_test_rf_predict_type AS
 $$
 library(randomForest)
 m1<- randomForest(y ~ x1 + x2)
@@ -227,7 +227,7 @@ DROP TABLE IF EXISTS public.plr_test_rf_abalone_predict ;
 CREATE TABLE public.plr_test_rf_abalone_predict 
 WITH (appendonly=TRUE, compresstype=zstd, compresslevel=7)
 AS 
-SELECT sex, (public.plr_rf_predict(id, y, x1, x2)).* 
+SELECT sex, (public.plr_test_rf_predict(id, y, x1, x2)).* 
   FROM public.plr_test_abalone_arr
 DISTRIBUTED BY (id);
 
