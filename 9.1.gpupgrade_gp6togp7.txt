@@ -1,0 +1,234 @@
+#### gpupgrade v2 from Greenplum 6 to Greenplum 7
+
+## 주의 사항
+
+환경변수를 삭제하고 하기 때문에, 환경변수를 적용했을 때 환경변수 unset하는 것이 중요.
+매번 환경 변수 확인 후 작업이 필요 함. (Greenplum 6, Greenplum 7)
+
+## Array 컬럼 테이블의 경우 Greenplum 6에서 사전에 통계를 수집하지 않도록 수정해 놓으면
+Greenplum 7 업그레이드 이후에 analyzedb 하는 시간을 줄일 수 있음. 
+
+ALTER TABLE tablename ALTER COLUMN columnname set STATISTICS 0;
+
+## 
+
+1. Test environment
+   1) VM : 
+      - 1 host : 4 vcore, 4GB
+      - Greenplum instance: 1 master + 4 primary segments 
+      - no mirror  
+   2) version
+      - gpupgrade 2.0.0  
+      -----------------------------------------------------------------------------------
+          db version     | greenplum-db-6.33.0            | greenplum-db-7.8.0
+      -----------------------------------------------------------------------------------
+        Greenplum CC     | greenplum-cc-web-6.16.1-gp6    | greenplum-cc-web-7.6.1-gp7
+      -----------------------------------------------------------------------------------
+           pxf           | pxf-gp6-7.1.1-2                | pxf-gp7-7.1.1
+      -----------------------------------------------------------------------------------
+          madlib         | madlib-2.2.0-gp6               | madlib-2.2.0-gp7
+      -----------------------------------------------------------------------------------
+           plr           | plr-3.1.3-gp6                  | plr-3.1.3-gp7
+      -----------------------------------------------------------------------------------
+         DataScienceR    | DataScienceR-2.2.0-gp6         | DataScienceR-2.2.0-gp7
+      -----------------------------------------------------------------------------------
+       DataSciencePython | DataSciencePython3.9-2.2.6-gp6 | DataSciencePython3.11-3.0.5-gp7
+      -----------------------------------------------------------------------------------
+
+2. Pre-upgrade
+   1) 서비스 체크 
+     $ gpstart -a  # or gpstate 
+     $ gpcc start  # or gpcc status 
+     $ pxf cluster start  # or pxf cluster status
+   2) Greenplum 확장 패키지 확인 
+     $ psql -c "SELECT * FROM pg_extension;"
+             extname      | extowner | extnamespace | extrelocatable | extversion | extconfig | extcondition
+       -------------------+----------+--------------+----------------+------------+-----------+--------------
+        plpgsql           |       10 |           11 | f              | 1.0        |           |
+        pxf               |       10 |         2200 | f              | 3.0        |           |
+        plpython3u        |       10 |           11 | f              | 1.0        |           |
+        madlib            |       10 |        20569 | f              | 2.2.0      |           |
+        plr               |       10 |         2200 | t              | 8.3.0.16   |           |
+        gp_internal_tools |       10 |         2200 | t              | 1.1        |           |
+       (6 rows)
+
+3. Initialize
+   1) gpupgrade & Greenplum 7 설치 
+      $ sudo yum install -y /data/setup/greenplum-db-7.8.0-el9-x86_64.rpm ## 모든 노드 설치 
+      $ sudo chown -R gpadmin:gpadmin /usr/local/greenplum-db*
+      $ sudo yum install -y /data/setup/pxf-gp7-7.1.1-2.el9.x86_64.rpm
+      $ sudo chown -R gpadmin:gpadmin /usr/local/pxf-gp*
+      $ sudo yum install -y /data/setup/gpupgrade-2.0.0-1.el9.x86_64.rpm ## 모든 노드 설치 
+      $ mkdir -p ~/gpupgrade
+      $ cp /usr/local/bin/greenplum/gpupgrade/gpupgrade_config ~/gpupgrade/
+      $ cd ~/gpupgrade/
+      $ vi gpupgrade_config  ## 아래 내용 수정      
+        source_master_port = 5432 ## modify
+        source_gphome = /usr/local/greenplum-db-6.33.0   ## modify
+        target_gphome = /usr/local/greenplum-db-7.8.0    ## modify
+        mode = copy ## modify
+        disk_free_ratio = 0.5 ## modify
+      $ vi ~/.bashrc              ## greenplum_path.sh 주석 처리
+        #source /usr/local/greenplum-db/greenplum_path.sh
+        #
+      $ exit
+      $ ssh - gpadmin
+      $ env | grep GPHOME         ## GPHOME관련된 변수가 나오면 안됨.
+      $ 
+      $ gpupgrade initialize --verbose --file $HOME/gpupgrade/gpupgrade_config
+
+   2) ERROR 발생
+      Error: rpc error: code = Internal desc = substep "initialize_check_extensions":
+      
+      In database: gpadmin
+          LOAD failed due to: ERROR: could not load library "/usr/local/pxf-gp6/gpextable/pxf.so": /usr/local/pxf-gp6/gpextable/pxf.so:       undefined symbol: MemoryAccounting_SaveToLog (SQLSTATE 58P01)
+      In database: gpkrtpch
+          LOAD failed due to: ERROR: could not access file "$libdir/plr": No such file or directory (SQLSTATE 58P01)
+      In database: gpkrtpch
+          LOAD failed due to: ERROR: could not access file "$libdir/libmadlib.so": No such file or directory (SQLSTATE 58P01)
+      NEXT ACTIONS
+      ------------
+      
+      Target Cluster:
+      * Install the same version of the extension that is installed in the source
+        cluster. Installation steps will be provided in the 'upgrading with extensions'
+        instruction in the online documentation of initialize.
+      
+      Source Cluster:
+      * Uninstall any unsupported extensions. These are typically extensions that do
+        not have an equivalent extension version in the target cluster.
+      
+      gupgrade config:
+      * You may need to set dynamic_library_path in the gpupgrade_config.
+      
+      Target cluster is running.
+      In a new shell set the following environment variables and perform the tasks above:
+      source /usr/local/greenplum-db-7.8.0/greenplum_path.sh
+      export COORDINATOR_DATA_DIRECTORY=/data/master/gpseg.MtA_VLhleLE.-1
+      export PGPORT=50432
+      
+      
+      Please address the above issue and run "gpupgrade initialize" again.
+      If you would like to return the cluster to its original state, please run "gpupgrade revert".
+
+   3) load 에러시 조치 방법
+      3.1) pxf 에러 조치 
+         $ export JAVA_HOME=/usr/local/jdk-11.0.2
+         $ export PXF_BASE=/usr/local/pxf-gp6
+         $ export PXF_CONF=$PXF_BASE/conf
+         $ export PATH=$PATH:$PXF_BASE/bin      
+         $ export GPHOME=/usr/local/greenplum-db-6.33.0/
+         $ /usr/local/pxf-gp6/bin/pxf-pre-gpupgrade
+         Success                                     
+         $         
+
+      3.2) plr error 조치 
+      $ gpupgrade kill-services && gpupgrade restart-services
+      $ source /usr/local/greenplum-db-7.8.0/greenplum_path.sh
+      $ export COORDINATOR_DATA_DIRECTORY=/data/master/gpseg.MtA_VLhleLE.-1
+      $ export PGPORT=50432
+      $ createdb gpkrtpch
+
+      $ gppkg install plr-3.1.3-gp7-rhel9-x86_64.gppkg
+      $ gpstop -af
+      ## exit session
+      ## loging as gpadmin
+
+       source /usr/local/greenplum-db-7.8.0/greenplum_path.sh
+       export COORDINATOR_DATA_DIRECTORY=/data/master/gpseg.MtA_VLhleLE.-1
+       export PGPORT=50432
+       export R_HOME=$GPHOME/ext/R-3.3.3
+      $ gpstart -a
+
+      
+      3.2) madlib 조치 
+      $ tar zxf madlib-2.2.0-gp7-el9-x86_64.tar.gz
+      $ cd madlib-2.2.0-gp7-el9-x86_64
+      $ gppkg install madlib-2.2.0-gp7-el9-x86_64.gppkg.tar.gz
+      $ psql -c "CREATE EXTENSION plpython3u ;"
+      $ psql -c "CREATE EXTENSION madlib ;"
+
+      
+      
+4. Execute
+   execute 하는 동안에 세션이 연결되어 있으면 안됨. (즉 아무런 오퍼레이션을 하면 안됨)
+    1) gpupgrade execute
+    $ ./up2_exex.sh
+
+    2) DB 체크 
+source /usr/local/greenplum-db-7.8.0/greenplum_path.sh
+export COORDINATOR_DATA_DIRECTORY=/data/master/gpseg.MtA_VLhleLE.-1
+export PGPORT=50432
+
+2.1 확장 패키지가 설치되어 있지 않으면, 설치 
+$ gppkg install madlib-2.2.0-gp7-el9-x86_64.gppkg.tar.gz
+$ gppkg install plr-3.1.3-gp7-rhel9-x86_64.gppkg
+$ gppkg install DataScienceR-2.2.0-gp7-el9_x86_64.gppkg
+$ gppkg install DataSciencePython3.11-3.0.5-gp7-el9_x86_64.gppkg
+gpconfig -c plpython3.python_path \
+  -v "'$GPHOME/ext/DataSciencePython3.11/lib/python3.11/site-packages:$GPHOME/ext/DataSciencePython3.11/lib64/python3.11/site-packages'" \
+  --skipvalidation
+gpstop -u
+
+
+2.2 PXF가 수행되지 않을 경우
+export JAVA_HOME=/usr/local/jdk-11.0.2
+export PXF_BASE=/usr/local/pxf-gp7
+export PXF_CONF=$PXF_BASE/conf
+export PATH=$PATH:$PXF_BASE/bin      
+source /usr/local/greenplum-db-7.8.0/greenplum_path.sh
+export COORDINATOR_DATA_DIRECTORY=/data/master/gpseg.MtA_VLhleLE.-1
+export PGPORT=50432
+
+for dir in conf  groups  keytabs  lib  servers  ssl; do
+    cp -aiv /usr/local/pxf-gp6/clusters/default/$dir/. /usr/local/pxf-gp7/clusters/default/$dir/
+done
+pxf cluster sync
+
+2.3 plr에서 확장 패키지가 보이지 않을 경우
+환경 변수 적용 후 DB Restart 
+source /usr/local/greenplum-db-7.8.0/greenplum_path.sh
+export COORDINATOR_DATA_DIRECTORY=/data/master/gpseg.MtA_VLhleLE.-1
+export PGPORT=50432
+export R_HOME=$GPHOME/ext/R-3.3.3
+gpstop -af 
+gpstart -a 
+
+
+2.4 체크 
+  - 사이즈 차이 나는 것은 xlog 때문임, 데이터 사이즈 차이는 0.5% 미만
+[gpadmin@r9g6s2 primary]$ ls -la
+total 32
+drwxr-xr-x  11 gpadmin gpadmin  188 May  7 13:22 .
+drwxr-xr-x. 13 gpadmin gpadmin  160 May  7 09:33 ..
+drwx------   6 gpadmin gpadmin  114 May  7 13:32 .gpupgrade
+drwx------  21 gpadmin gpadmin 4096 May  7 14:34 gpseg.MtA_VLhleLE.0
+drwx------  21 gpadmin gpadmin 4096 May  7 14:34 gpseg.MtA_VLhleLE.1
+drwx------  21 gpadmin gpadmin 4096 May  7 14:34 gpseg.MtA_VLhleLE.2
+drwx------  21 gpadmin gpadmin 4096 May  7 14:34 gpseg.MtA_VLhleLE.3
+drwx------  22 gpadmin gpadmin 4096 May  7 14:32 gpseg0
+drwx------  22 gpadmin gpadmin 4096 May  7 14:32 gpseg1
+drwx------  22 gpadmin gpadmin 4096 May  7 14:32 gpseg2
+drwx------  22 gpadmin gpadmin 4096 May  7 14:32 gpseg3
+[gpadmin@r9g6s2 primary]$ du -sh ./*
+697M    ./gpseg.MtA_VLhleLE.0
+697M    ./gpseg.MtA_VLhleLE.1
+699M    ./gpseg.MtA_VLhleLE.2
+698M    ./gpseg.MtA_VLhleLE.3
+1.5G    ./gpseg0
+1.5G    ./gpseg1
+1.5G    ./gpseg2
+1.5G    ./gpseg3
+[gpadmin@r9g6s2 primary]$
+
+
+5. Finalize
+gpupgrade finalize --verbose
+
+
+6. Post-upgrade
+$ analyzedb -d gpkrtpch -p 4
+
+
+7. Revert
+
