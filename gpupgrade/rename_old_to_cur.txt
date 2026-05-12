@@ -1,0 +1,5 @@
+##  for master 
+ls -d /data/master/gpseg*old | grep gpseg | sed 's/://g' | awk -F"." '{print "mv "$0 " " $1 $3}'
+
+## for primary
+ls -d /data/primary/gpseg*old  | grep gpseg | sed 's/://g' | awk -F"." '{print "mv "$0 " " $1 $3}'

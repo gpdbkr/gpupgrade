@@ -1,0 +1,1 @@
+env | egrep "GP|PG|PXF|DATA_DIRECTORY|PYTHON|JAVA|R_HOME" | sort

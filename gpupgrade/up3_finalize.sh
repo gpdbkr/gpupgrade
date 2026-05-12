@@ -1,0 +1,1 @@
+gpupgrade finalize --verbose

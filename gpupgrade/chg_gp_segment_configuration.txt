@@ -1,0 +1,23 @@
+exit 
+\q
+
+--## How to manually change and restore paths
+select * from gp_segment_configuration order by 1;
+set allow_system_table_mods=on;
+begin;
+update gp_segment_configuration set datadir =  '/data/master/gpseg.MtA_VLhleLE.-1.old' where datadir = '/data/master/gpseg-1';
+update gp_segment_configuration set datadir =  '/data/primary/gpseg.MtA_VLhleLE.0.old' where datadir = '/data/primary/gpseg0';
+update gp_segment_configuration set datadir =  '/data/primary/gpseg.MtA_VLhleLE.1.old' where datadir = '/data/primary/gpseg1';
+update gp_segment_configuration set datadir =  '/data/primary/gpseg.MtA_VLhleLE.2.old' where datadir = '/data/primary/gpseg2';
+update gp_segment_configuration set datadir =  '/data/primary/gpseg.MtA_VLhleLE.3.old' where datadir = '/data/primary/gpseg3';
+select * from gp_segment_configuration order by 1;
+end;
+
+
+select * from gp_segment_configuration order by 1;
+set allow_system_table_mods=on;
+begin;
+update gp_segment_configuration set datadir = replace(replace(datadir, '.MtA_VLhleLE.', ''), '.old', '') ;
+select * from gp_segment_configuration order by 1;
+end;
+

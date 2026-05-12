@@ -1,0 +1,1 @@
+gpupgrade execute --verbose
